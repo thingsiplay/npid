@@ -63,12 +63,6 @@ do
     then
         pid="$arg"
 
-        # `cat` is faster than `ps`. Uncomment and comment following lines to
-        # swap the commands. There stdout should be identical, if options are
-        # not changed, but the stderr message and exit codes may differ.
-        #
-        #ps -p "${pid}" -o comm=
-        # cat "/proc/${pid}/comm"
         output="$(cat "/proc/${pid}/comm")"
 
         err_code="$?"
