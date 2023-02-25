@@ -1,8 +1,9 @@
 # npid
 Get name of process by pid
 
-Print name of the processes by one or more space separated PIDs. Such a PID must
-be an integer number and can be obtained through `pidof` command in example.
+Bash script for Linux to print name of the processes by one or more space
+separated PIDs. Such a PID must be an integer number and can be obtained
+through `pidof` command in example.
 
 ## Examples:
         
