@@ -1,0 +1,108 @@
+#!/bin/env bash
+
+print_usage() {
+    echo \
+'npid - Get name of process by pid
+
+Usage:
+    npid [-h] [-p] [-c] PID [PID ...]
+
+Examples:
+    npid
+    npid 1212
+    npid -p -c $(pidof python)
+
+Options:
+    -h, --help      print this help and exit
+    -p              list pid next to each name of pid
+    -c              list commandline after each name of pid'
+}
+
+if [ "${#}" == 0 ]
+then
+    print_usage >&2
+    exit 1
+fi
+
+unset -v pid
+unset -v opt
+unset -v opt_p
+unset -v opt_c
+unset -v err_code
+unset -v output
+opt=""
+pid=""
+opt_p=0
+opt_c=0
+err_code=1
+output=""
+
+# Name of process by pid
+for arg in "${@}"
+do
+    if [[ "${arg}" =~ ^- ]]
+    then
+        opt="$arg"
+        if [[ "${opt}" == "-h" || "${opt}" == "--help" ]]
+        then
+            print_usage
+            exit 0
+        elif [ "${opt}" == "-p" ]
+        then
+            opt_p=1
+            continue
+        elif [ "${opt}" == "-c" ]
+        then
+            opt_c=1
+            continue
+        else
+            echo "Unknown option: \"${opt}\"" >&2
+            exit 1
+        fi
+    elif [[ "${arg}" =~ ^[0-9]+$ ]]
+    then
+        pid="$arg"
+
+        # `cat` is faster than `ps`. Uncomment and comment following lines to
+        # swap the commands. There stdout should be identical, if options are
+        # not changed, but the stderr message and exit codes may differ.
+        #
+        #ps -p "${pid}" -o comm=
+        # cat "/proc/${pid}/comm"
+        output="$(cat "/proc/${pid}/comm")"
+
+        err_code="$?"
+        if [ "${err_code}" -ne "0" ]
+        then
+            exit "${err_code}"
+        else
+            if [ "${opt_p}" == 1 ]
+            then
+                printf "${pid} "
+            fi
+
+            printf "${output}"
+
+            if [ "${opt_c}" == 1 ]
+            then
+                printf ": "
+                strings -s " " "/proc/${pid}/cmdline"
+            fi
+            echo ""
+        fi
+    else
+        echo "Illegal argument. PID must be an integer: \"${arg}\"" >&2
+        exit 1
+    fi
+done
+
+if [ "${err_code}" -ne "0" ]
+then
+    if [[ "${opt}" != "" && "${pid}" == "" ]]
+    then
+        echo "Options found, but PID input is missing: \"${@}\"" >&2
+    else
+        echo "No successful operation. Halt with exit code: ${err_code}" >&2
+    fi
+    exit "${err_code}"
+fi
