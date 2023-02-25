@@ -20,3 +20,11 @@ through `pidof` command in example.
     $ npid -p -c $(pidof python)
     787 python: /usr/bin/python /usr/bin/qtile start --no-spawn --with-state=/tmp/qtile-state 
     601 firewalld: /usr/bin/python /usr/bin/firewalld --nofork --nopid 
+
+And here is a little Bash function that you can add to your .bashrc:
+
+    npidof () { npid -p -c $(pidof "$@") ; }
+
+    $ npidof python 
+    787 python: /usr/bin/python /usr/bin/qtile start --no-spawn --with-state=/tmp/qtile-state 
+    601 firewalld: /usr/bin/python /usr/bin/firewalld --nofork --nopid 
