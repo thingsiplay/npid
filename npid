@@ -1,102 +1,151 @@
 #!/bin/env bash
 
-print_usage() {
-    echo \
-'npid - Get name of process by pid
-
-Usage:
-    npid [-h] [-p] [-c] PID [PID ...]
-
-Examples:
-    npid
-    npid 1212
-    npid -p -c $(pidof python)
-
-Options:
-    -h, --help      print this help and exit
-    -p              list pid next to each name of pid
-    -c              list commandline after each name of pid'
+show_version () {
+cat << EOF
+npid v0.2
+EOF
 }
 
-if [ "${#}" == 0 ]
+show_usage () {
+    local pname
+    pname="${0##*/}"
+
+cat << EOF
+usage:
+  ${pname} [-h] [-p] [-c] [--] [POPT ...] [PID ...] [NAME ...]
+EOF
+}
+
+show_help () {
+    local pname
+    local usage
+    pname="${0##*/}"
+    usage=$(show_usage)
+
+cat << EOF
+${usage}
+
+${pname} - Get name of process by pid
+
+positional arguments:
+  PID           process ID to search for, defaults to current shell process
+  NAME          name of process to search for, uses pidof to determine PID
+  POPT          positional options to hand over to pidof when using NAME
+
+options:
+  -h            print this help and exit
+  -p            include pid next to each name of output
+  -c            include commandline after each name of output
+  --            stop parsing script options, interpret after as positionals
+
+examples:
+  ${pname}
+  ${pname} \$PPID
+  ${pname} 2 40
+  ${pname} -p -c python
+  ${pname} -- -s python
+
+error code:
+  0             success: all requested parts are found
+  *             error: pid or name could not be resolved or any other error
+
+Copyright © 2023 Tuncay D. <https://github.com/thingsiplay/npid>'
+EOF
+}
+
+unset -v opt_include_pid
+unset -v opt_include_cmdline
+unset -v pidof_options
+unset -v pidof_names
+
+opt_include_pid=false
+opt_include_cmdline=false
+pidof_options=()
+pidof_names=()
+
+OPTIND=1
+while getopts 'hpc' OPTION
+do
+    case "${OPTION}" in
+        h)
+            show_help
+            exit 0
+            ;;
+        p)
+            opt_include_pid=true
+            ;;
+        c)
+            opt_include_cmdline=true
+            ;;
+        *)
+            show_usage >&2
+            exit 1
+            ;;
+    esac
+done
+shift "$((OPTIND-1))"
+
+if [[ ${#} -eq 0  ]]
 then
-    print_usage >&2
-    exit 1
+    argv=( "${$}" )
+else
+    argv=( "${@}" )
 fi
 
-unset -v pid
-unset -v opt
-unset -v opt_p
-unset -v opt_c
-unset -v err_code
-unset -v output
-opt=""
-pid=""
-opt_p=0
-opt_c=0
-err_code=1
-output=""
+find_name () {
+    local pid=''
+    local output=''
+    local cmdline=''
 
-# Name of process by pid
-for arg in "${@}"
+    for pid in "${@}"
+    do
+        if output="$(cat -- "/proc/${pid}/comm" 2>/dev/null)"
+        then
+            if [[ "${opt_include_pid}" = 'true' ]]
+            then
+                output="${pid} ${output}"
+            fi
+
+            if [ "${opt_include_cmdline}" = 'true' ]
+            then
+                if cmdline=$(strings -s " " "/proc/${pid}/cmdline" 2>/dev/null)
+                then
+                    output="${output}: ${cmdline}"
+                else
+                    exit ${?}
+                fi
+            fi
+
+            printf '%s\n' "${output}"
+        else
+            exit ${?}
+        fi
+    done
+}
+
+for query in "${argv[@]}"
 do
-    if [[ "${arg}" =~ ^- ]]
+    if [[ "${query}" =~ ^[0-9]+$ ]]
     then
-        opt="$arg"
-        if [[ "${opt}" == "-h" || "${opt}" == "--help" ]]
-        then
-            print_usage
-            exit 0
-        elif [ "${opt}" == "-p" ]
-        then
-            opt_p=1
-            continue
-        elif [ "${opt}" == "-c" ]
-        then
-            opt_c=1
-            continue
-        else
-            echo "Unknown option: \"${opt}\"" >&2
-            exit 1
-        fi
-    elif [[ "${arg}" =~ ^[0-9]+$ ]]
-    then
-        pid="$arg"
-
-        output="$(cat "/proc/${pid}/comm")"
-
-        err_code="$?"
-        if [ "${err_code}" -ne "0" ]
-        then
-            exit "${err_code}"
-        else
-            if [ "${opt_p}" == 1 ]
-            then
-                printf "${pid} "
-            fi
-
-            printf "${output}"
-
-            if [ "${opt_c}" == 1 ]
-            then
-                printf ": "
-                strings -s " " "/proc/${pid}/cmdline"
-            fi
-            echo ""
-        fi
+        find_name "${query}"
     else
-        echo "Illegal argument. PID must be an integer: \"${arg}\"" >&2
-        exit 1
+        if [[ "${query}" = '--' ]]
+        then
+            continue
+        elif [[ "${query}" =~ ^- ]]
+        then
+            pidof_options=( "${pidof_options[@]}" "${query}" )
+            continue
+        else
+            pidof_names=( $(pidof "${pidof_options[@]}" "${query}") )
+            if [[ "${pidof_names[0]}" = '' ]]
+            then
+                exit 1
+            else
+                find_name "${pidof_names[@]}"
+            fi
+        fi
     fi
 done
 
-if [ "${err_code}" -ne "0" ]
-then
-    if [[ "${opt}" != "" && "${pid}" == "" ]]
-    then
-        echo "Options found, but PID input is missing: \"${@}\"" >&2
-    else
-        echo "No successful operation. Halt with exit code: ${err_code}" >&2
-    fi
-    exit "${err_code}"
-fi
+exit 0
